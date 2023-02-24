@@ -1,9 +1,11 @@
-const {src, dest, watch, parallel } = require("gulp");
+const {src, dest, watch, parallel, series } = require("gulp");
 const scss = require('gulp-sass')(require('sass'));
 const concat = require('gulp-concat');
 const browserSync = require ('browser-sync').create();
 const uglify = require('gulp-uglify-es').default;
 const autoprefixer = require('gulp-autoprefixer');
+const imagemin = require('gulp-imagemin');
+const del = require('del');
 // const scss = require("gulp-sass");
 
 function styles(){
@@ -11,17 +13,23 @@ function styles(){
       .pipe(scss({outputStyle:'compressed'}))
       .pipe(concat('style.min.css'))
       .pipe(autoprefixer({
-         overrideBrowserlist:['last 10 version']
+         overrideBrowserlist:['last 10 version'],
+         grid: true
       }))
       .pipe(dest('app/css'))
       .pipe(browserSync.stream())
 }
 
-function watching () {
-   watch(['app/scss/**/*.scss'], styles)
-   watch(['app/js/main.js', '!app/js/main.min.js'], scripts)
-   watch(['app/*.html']).on('change', browserSync.reload);
+function build(){
+   return src([
+      'app/css/style.min.css',
+      'app/fonts/**/*',
+      'app/js/main.min.js',
+      'app/*.html'
+], {base:'app'})
+.pipe(dest('dist'))
 }
+
 
 function browsersync(){
    browserSync.init({
@@ -31,9 +39,43 @@ function browsersync(){
    });
 }
 
+function images(){
+   return src ('app/images/**/*')
+      .pipe(imagemin(
+         [
+            imagemin.gifsicle({interlaced: true}),
+            imagemin.mozjpeg({quality: 75, progressive: true}),
+            imagemin.optipng({optimizationLevel: 5}),
+            imagemin.svgo({
+               plugins: [
+                  {removeViewBox: true},
+                  {cleanupIDs: false}
+               ]
+            })
+         ]
+      ))
+
+      .pipe(dest('dist/images'))
+}
+
+function watching () {
+   watch(['app/scss/**/*.scss'], styles)
+   watch(['app/js/main.js', '!app/js/main.min.js'], scripts)
+   watch(['app/*.html']).on('change', browserSync.reload);
+}
+
+
+
+function cleanDist(){
+   return del ('dist')
+}
+
+
+
 function scripts(){
    return src ([
       'node_modules/jquery/dist/jquery.js',
+      'node_modules/slick-carousel/slick/slick.js',
       'app/js/main.js'
    ])
    .pipe(concat('main.min.js'))
@@ -46,4 +88,9 @@ exports.styles = styles;
 exports.watching = watching;
 exports.browsersync = browsersync;
 exports.scripts = scripts;
-exports.default = parallel(scripts, browsersync, watching)
+exports.images = images;
+exports.cleanDist = cleanDist;
+
+
+exports.build = series(cleanDist, build);
+exports.default = parallel(styles, scripts, browsersync, watching)
